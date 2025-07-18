@@ -1,0 +1,20 @@
+---
+dependencies: []
+galaxy_info:
+  role_name: ludus_sliver
+  author: NetPenguins
+  description: Sliver C2 for all your Ludus playground needs!
+  company: "NetPenguins"
+  license: MIT
+  min_ansible_version: "2.10"
+  platforms:
+    - name: Debian
+      versions:
+        - buster
+        - bullseye
+        - bookworm
+    - name: Ubuntu
+      versions:
+        - jammy
+        - focal
+        - bionic

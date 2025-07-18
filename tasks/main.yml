@@ -1,0 +1,114 @@
+---
+# Driving this hooptie
+- name: Install build dependencies
+  apt:
+    name:
+      - git
+      - golang
+      - build-essential
+      - make
+    state: present
+    update_cache: yes
+
+- name: Ensure /tmp/sliver-src directory is absent
+  file:
+    path: /tmp/sliver-src
+    state: absent
+
+- name: Determine Sliver version to use
+  set_fact:
+    sliver_version_resolved: "{{ sliver_version }}"
+  when: sliver_version not in ['stable', 'latest']
+
+- name: Get latest stable Sliver tag
+  shell: |
+    git ls-remote --tags --sort="v:refname" https://github.com/BishopFox/sliver | grep '\^{}' | tail -n1 | sed 's/.*refs\/tags\///;s/\^{}//'
+  register: sliver_latest_tag
+  when: sliver_version == 'stable'
+  changed_when: false
+
+- name: Set resolved version to latest stable tag
+  set_fact:
+    sliver_version_resolved: "{{ sliver_latest_tag.stdout }}"
+  when: sliver_version == 'stable'
+
+- name: Set resolved version to master for latest
+  set_fact:
+    sliver_version_resolved: "master"
+  when: sliver_version == 'latest'
+
+- name: Clone Sliver repository
+  git:
+    repo: "{{ sliver_repo_url }}"
+    dest: /tmp/sliver-src
+    version: "{{ sliver_version_resolved }}"
+    force: yes
+
+- name: Download Go modules
+  shell: |
+    cd /tmp/sliver-src
+    go mod download
+
+# Some versions had weird issues with needed more than one build
+# leaving this for now because why not
+- name: Build Sliver - First attempt
+  shell: |
+    set -o pipefail
+    make 2>&1 | tee /tmp/sliver_build_attempt1.log || true
+  args:
+    chdir: /tmp/sliver-src
+
+- name: Build Sliver - Second attempt
+  shell: |
+    set -o pipefail
+    make 2>&1 | tee /tmp/sliver_build_attempt2.log
+  args:
+    chdir: /tmp/sliver-src
+  register: sliver_build
+
+- name: Fail if build failed again
+  fail:
+    msg: "Sliver build failed on second attempt"
+  when: sliver_build.rc != 0
+
+- name: Copy sliver-server binary
+  copy:
+    src: /tmp/sliver-src/sliver-server
+    dest: "{{ sliver_install_path }}/sliver-server"
+    mode: '0755'
+    remote_src: yes
+
+- name: Copy sliver-client binary
+  copy:
+    src: /tmp/sliver-src/sliver-client
+    dest: "{{ sliver_install_path }}/sliver-client"
+    mode: '0755'
+    remote_src: yes
+
+- name: Create systemd service for Sliver (optional)
+  when: sliver_create_service
+  template:
+    src: sliver-server.service.j2
+    dest: /etc/systemd/system/{{ sliver_service_name }}.service
+    mode: '0644'
+  notify: Restart Sliver
+
+- name: Copy Sliver configuration files if present
+  copy:
+    src: "{{ item }}"
+    dest: "/root/.sliver/{{ item | basename }}"
+    owner: root
+    group: root
+    mode: '0600'
+  with_fileglob:
+    - "{{ role_path }}/files/*.yaml"
+    - "{{ role_path }}/files/*.yml"
+    - "{{ role_path }}/files/*.json"
+  when: (lookup('fileglob', role_path + '/files/*.yaml', errors='ignore') | length > 0) or
+        (lookup('fileglob', role_path + '/files/*.yml', errors='ignore') | length > 0) or
+        (lookup('fileglob', role_path + '/files/*.json', errors='ignore') | length > 0)
+
+- name: Clean up build directory
+  file:
+    path: /tmp/sliver-src
+    state: absent

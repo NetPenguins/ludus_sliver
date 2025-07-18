@@ -1,0 +1,7 @@
+---
+- name: Restart Sliver
+  systemd:
+    name: "{{ sliver_service_name }}"
+    state: restarted
+    enabled: yes
+    daemon_reload: yes 

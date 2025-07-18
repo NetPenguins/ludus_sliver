@@ -1,0 +1,13 @@
+[Unit]
+Description=Sliver C2 Server
+After=network.target
+
+[Service]
+Type=simple
+User={{ sliver_service_user }}
+Group={{ sliver_service_group }}
+ExecStart={{ sliver_install_path }}/sliver-server {{ sliver_service_args }}
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target 

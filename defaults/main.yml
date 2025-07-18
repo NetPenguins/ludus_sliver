@@ -1,0 +1,13 @@
+---
+# Default variables for the Sliver Role
+sliver_repo_url: "https://github.com/BishopFox/sliver.git"
+# 'stable' will get you the latest release
+# 'latest' will get you the master branch (likely to have bugs, but also cooler stuff so enjoy!)
+sliver_version: "latest" 
+sliver_install_path: "/usr/local/bin"
+sliver_build_user: "root"
+sliver_create_service: true
+sliver_service_name: "sliver-server"
+sliver_service_user: "root"
+sliver_service_group: "root"
+sliver_service_args: ""
