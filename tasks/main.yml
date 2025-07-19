@@ -1,14 +1,9 @@
 ---
-# Driving this hooptie
-- name: Install build dependencies
-  apt:
-    name:
-      - git
-      - golang
-      - build-essential
-      - make
-    state: present
-    update_cache: yes
+######################
+#   Install Sliver   #
+######################
+- name: Include Go installation tasks
+  include_tasks: install_go.yml
 
 - name: Ensure /tmp/sliver-src directory is absent
   file:
@@ -49,26 +44,17 @@
     cd /tmp/sliver-src
     go mod download
 
-# Some versions had weird issues with needed more than one build
-# leaving this for now because why not
-- name: Build Sliver - First attempt
+- name: Build Sliver
   shell: |
     set -o pipefail
     make 2>&1 | tee /tmp/sliver_build_attempt1.log || true
   args:
     chdir: /tmp/sliver-src
-
-- name: Build Sliver - Second attempt
-  shell: |
-    set -o pipefail
-    make 2>&1 | tee /tmp/sliver_build_attempt2.log
-  args:
-    chdir: /tmp/sliver-src
   register: sliver_build
 
-- name: Fail if build failed again
+- name: Fail if build failed
   fail:
-    msg: "Sliver build failed on second attempt"
+    msg: "Sliver build failed"
   when: sliver_build.rc != 0
 
 - name: Copy sliver-server binary

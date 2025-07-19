@@ -1,0 +1,51 @@
+---
+#  Need to target go install according to https://sliver.sh/docs?name=Compile+from+Source
+
+- name: Install build dependencies (excluding Go for now)
+  apt:
+    name:
+      - git
+      - build-essential
+      - make
+      - wget
+    state: present
+    update_cache: yes
+
+- name: Check if we need Go 1.20.7 (for stable/1.5.x versions)
+  set_fact:
+    need_go_1_20_7: "{{ sliver_version == 'stable' or (sliver_version is match('1\\.5\\..*')) }}"
+
+- name: Remove existing Go installation (for stable/1.5.x versions)
+  apt:
+    name: golang-go
+    state: absent
+  when: need_go_1_20_7
+
+- name: Download Go 1.20.7 tarball (for stable/1.5.x versions)
+  get_url:
+    url: https://go.dev/dl/go1.20.7.linux-amd64.tar.gz
+    dest: /tmp/go1.20.7.linux-amd64.tar.gz
+    mode: '0644'
+  when: need_go_1_20_7
+
+- name: Extract Go 1.20.7 to /usr/local (for stable/1.5.x versions)
+  unarchive:
+    src: /tmp/go1.20.7.linux-amd64.tar.gz
+    dest: /usr/local
+    remote_src: yes
+    creates: /usr/local/go/bin/go
+  when: need_go_1_20_7
+
+- name: Create symlink for Go binary in /usr/local/bin (for stable/1.5.x versions)
+  file:
+    src: /usr/local/go/bin/go
+    dest: /usr/local/bin/go
+    state: link
+    force: yes
+  when: need_go_1_20_7
+
+- name: Install Go from apt (for latest versions)
+  apt:
+    name: golang
+    state: present
+  when: not need_go_1_20_7 

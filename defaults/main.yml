@@ -3,7 +3,7 @@
 sliver_repo_url: "https://github.com/BishopFox/sliver.git"
 # 'stable' will get you the latest release
 # 'latest' will get you the master branch (likely to have bugs, but also cooler stuff so enjoy!)
-sliver_version: "latest" 
+sliver_version: "stable" 
 sliver_install_path: "/usr/local/bin"
 sliver_build_user: "root"
 sliver_create_service: true

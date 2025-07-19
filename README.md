@@ -31,7 +31,7 @@ An Ansible role to build and deploy the [Sliver C2](https://sliver.sh/) framewor
 | Variable                | Description                                                                 | Default                |
 |-------------------------|-----------------------------------------------------------------------------|------------------------|
 | `sliver_repo_url`       | Sliver GitHub repo URL                                                      | `https://github.com/BishopFox/sliver.git` |
-| `sliver_version`        | Version to install: `stable`, `latest`, or any tag/branch/commit            | `latest`               |
+| `sliver_version`        | Version to install: `stable`, `latest`, or any tag/branch/commit            | `stable`               |
 | `sliver_install_path`   | Where to install the Sliver binaries                                        | `/usr/local/bin`       |
 | `sliver_build_user`     | User to build as                                                            | `root`                 |
 | `sliver_create_service` | Whether to install a systemd service for `sliver-server`                    | `true`                 |
