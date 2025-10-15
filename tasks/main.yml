@@ -10,6 +10,12 @@
     path: /tmp/sliver-src
     state: absent
 
+- name: Ensure sliver install path exists
+  file:
+    path: "{{ sliver_install_path }}"
+    state: directory
+    mode: '0755'
+    
 - name: Determine Sliver version to use
   set_fact:
     sliver_version_resolved: "{{ sliver_version }}"
