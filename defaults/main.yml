@@ -10,4 +10,4 @@ sliver_create_service: true
 sliver_service_name: "sliver-server"
 sliver_service_user: "root"
 sliver_service_group: "root"
-sliver_service_args: ""
+sliver_service_args: "daemon"
