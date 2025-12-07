@@ -63,16 +63,48 @@
     msg: "Sliver build failed"
   when: sliver_build.rc != 0
 
+- name: Find sliver-server binary
+  find:
+    paths: /tmp/sliver-src
+    patterns: 'sliver-server*'
+    file_type: file
+    recurse: no
+  register: sliver_server_binary
+
+- name: Find sliver-client binary
+  find:
+    paths: /tmp/sliver-src
+    patterns: 'sliver-client*'
+    file_type: file
+    recurse: no
+  register: sliver_client_binary
+
+- name: Debug - Show found binaries
+  debug:
+    msg: |
+      Server binary: {{ sliver_server_binary.files | map(attribute='path') | list }}
+      Client binary: {{ sliver_client_binary.files | map(attribute='path') | list }}
+
+- name: Fail if server binary not found
+  fail:
+    msg: "sliver-server binary not found after build"
+  when: sliver_server_binary.files | length == 0
+
+- name: Fail if client binary not found
+  fail:
+    msg: "sliver-client binary not found after build"
+  when: sliver_client_binary.files | length == 0
+
 - name: Copy sliver-server binary
   copy:
-    src: /tmp/sliver-src/sliver-server
+    src: "{{ sliver_server_binary.files[0].path }}"
     dest: "{{ sliver_install_path }}/sliver-server"
     mode: '0755'
     remote_src: yes
 
 - name: Copy sliver-client binary
   copy:
-    src: /tmp/sliver-src/sliver-client
+    src: "{{ sliver_client_binary.files[0].path }}"
     dest: "{{ sliver_install_path }}/sliver-client"
     mode: '0755'
     remote_src: yes
