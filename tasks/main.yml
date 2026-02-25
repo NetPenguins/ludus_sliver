@@ -2,41 +2,72 @@
 ######################
 #   Install Sliver   #
 ######################
+
+- name: Check if sliver-server binary already exists
+  stat:
+    path: "{{ sliver_install_path }}/sliver-server"
+  register: sliver_server_stat
+
+- name: Check if sliver-client binary already exists
+  stat:
+    path: "{{ sliver_install_path }}/sliver-client"
+  register: sliver_client_stat
+
+- name: Set fact - sliver binaries already installed
+  set_fact:
+    sliver_binaries_present: "{{ sliver_server_stat.stat.exists and sliver_client_stat.stat.exists }}"
+
+- name: Show sliver binary status
+  debug:
+    msg: "Sliver binaries already present at {{ sliver_install_path }}, skipping build."
+  when: sliver_binaries_present
+
 - name: Include Go installation tasks
   include_tasks: install_go.yml
+  when: not sliver_binaries_present
 
 - name: Ensure /tmp/sliver-src directory is absent
   file:
     path: /tmp/sliver-src
     state: absent
+  when: not sliver_binaries_present
 
 - name: Ensure sliver install path exists
   file:
     path: "{{ sliver_install_path }}"
     state: directory
     mode: '0755'
-    
+  when: not sliver_binaries_present
+
 - name: Determine Sliver version to use
   set_fact:
     sliver_version_resolved: "{{ sliver_version }}"
-  when: sliver_version not in ['stable', 'latest']
+  when:
+    - not sliver_binaries_present
+    - sliver_version not in ['stable', 'latest']
 
 - name: Get latest stable Sliver tag
   shell: |
     git ls-remote --tags --sort="v:refname" https://github.com/BishopFox/sliver | grep '\^{}' | tail -n1 | sed 's/.*refs\/tags\///;s/\^{}//'
   register: sliver_latest_tag
-  when: sliver_version == 'stable'
+  when:
+    - not sliver_binaries_present
+    - sliver_version == 'stable'
   changed_when: false
 
 - name: Set resolved version to latest stable tag
   set_fact:
     sliver_version_resolved: "{{ sliver_latest_tag.stdout }}"
-  when: sliver_version == 'stable'
+  when:
+    - not sliver_binaries_present
+    - sliver_version == 'stable'
 
 - name: Set resolved version to master for latest
   set_fact:
     sliver_version_resolved: "master"
-  when: sliver_version == 'latest'
+  when:
+    - not sliver_binaries_present
+    - sliver_version == 'latest'
 
 - name: Clone Sliver repository
   git:
@@ -44,11 +75,13 @@
     dest: /tmp/sliver-src
     version: "{{ sliver_version_resolved }}"
     force: yes
+  when: not sliver_binaries_present
 
 - name: Download Go modules
   shell: |
     cd /tmp/sliver-src
     go mod download
+  when: not sliver_binaries_present
 
 - name: Build Sliver
   shell: |
@@ -57,11 +90,14 @@
   args:
     chdir: /tmp/sliver-src
   register: sliver_build
+  when: not sliver_binaries_present
 
 - name: Fail if build failed
   fail:
     msg: "Sliver build failed"
-  when: sliver_build.rc != 0
+  when:
+    - not sliver_binaries_present
+    - sliver_build.rc != 0
 
 - name: Find sliver-server binary
   find:
@@ -70,6 +106,7 @@
     file_type: file
     recurse: no
   register: sliver_server_binary
+  when: not sliver_binaries_present
 
 - name: Find sliver-client binary
   find:
@@ -78,22 +115,28 @@
     file_type: file
     recurse: no
   register: sliver_client_binary
+  when: not sliver_binaries_present
 
 - name: Debug - Show found binaries
   debug:
     msg: |
       Server binary: {{ sliver_server_binary.files | map(attribute='path') | list }}
       Client binary: {{ sliver_client_binary.files | map(attribute='path') | list }}
+  when: not sliver_binaries_present
 
 - name: Fail if server binary not found
   fail:
     msg: "sliver-server binary not found after build"
-  when: sliver_server_binary.files | length == 0
+  when:
+    - not sliver_binaries_present
+    - sliver_server_binary.files | length == 0
 
 - name: Fail if client binary not found
   fail:
     msg: "sliver-client binary not found after build"
-  when: sliver_client_binary.files | length == 0
+  when:
+    - not sliver_binaries_present
+    - sliver_client_binary.files | length == 0
 
 - name: Copy sliver-server binary
   copy:
@@ -101,6 +144,7 @@
     dest: "{{ sliver_install_path }}/sliver-server"
     mode: '0755'
     remote_src: yes
+  when: not sliver_binaries_present
 
 - name: Copy sliver-client binary
   copy:
@@ -108,6 +152,7 @@
     dest: "{{ sliver_install_path }}/sliver-client"
     mode: '0755'
     remote_src: yes
+  when: not sliver_binaries_present
 
 - name: Create systemd service for Sliver (optional)
   when: sliver_create_service
@@ -143,4 +188,5 @@
 - name: Clean up build directory
   file:
     path: /tmp/sliver-src
-    state: absent  
+    state: absent
+  when: not sliver_binaries_present

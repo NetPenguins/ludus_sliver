@@ -2,11 +2,12 @@
 ####################################
 #   Sliver Implant Generator Setup  #
 ####################################
-- name: Ensure python3-venv is installed
+- name: Ensure python3-venv, python3-pip, and git are installed
   apt:
     name:
       - python3-venv
       - python3-pip
+      - git
     state: present
     update_cache: yes
     install_recommends: false
@@ -22,11 +23,31 @@
   args:
     creates: "{{ sliver_implant_venv_path }}/bin/activate"
 
-- name: Install sliver-py from branch into venv
+- name: Check if sliver-py is already installed in venv
+  command: "{{ sliver_implant_venv_path }}/bin/python -c 'import sliver; print(sliver.__version__)'"
+  register: sliver_py_check
+  changed_when: false
+  failed_when: false
+
+- name: Clone sliver-py repository
+  git:
+    repo: "{{ sliver_py_repo }}"
+    dest: "{{ sliver_implant_venv_path }}/sliver-py-src"
+    version: "{{ sliver_py_branch }}"
+    depth: 1
+    recursive: false
+    force: false
+  register: sliver_py_git_clone
+  when: sliver_py_check.rc != 0
+
+- name: Install sliver-py from local clone into venv
   pip:
-    name: "git+{{ sliver_py_repo }}@{{ sliver_py_branch }}"
+    name: "{{ sliver_implant_venv_path }}/sliver-py-src"
     virtualenv: "{{ sliver_implant_venv_path }}"
     state: present
+  when:
+    - sliver_py_check.rc != 0
+    - sliver_py_git_clone is not skipped
 
 - name: Deploy sliver-implant.py script
   copy:
