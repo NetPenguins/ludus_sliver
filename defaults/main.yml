@@ -1,6 +1,9 @@
 ---
 # Default variables for the Sliver Role
 sliver_repo_url: "https://github.com/BishopFox/sliver.git"
+# Minimum free disk space (GB) required before attempting a Sliver build.
+# The asset downloads (Go toolchains x6 + Zig x6 + Garble) consume ~10GB.
+sliver_min_disk_gb: 15
 # 'stable' will get you the latest release
 # 'latest' will get you the master branch (likely to have bugs, but also cooler stuff so enjoy!)
 sliver_version: "stable" 

@@ -69,6 +69,23 @@
     - not sliver_binaries_present
     - sliver_version == 'latest'
 
+- name: Check available disk space before build
+  shell: df --output=avail -BG / | tail -1 | tr -d 'G '
+  register: disk_avail_gb
+  changed_when: false
+  when: not sliver_binaries_present
+
+- name: Fail if insufficient disk space for Sliver build
+  fail:
+    msg: >
+      Not enough disk space to build Sliver.
+      Available: {{ disk_avail_gb.stdout }}GB, required: at least {{ sliver_min_disk_gb }}GB.
+      The build downloads Go toolchains, Zig, and Garble for 6 platforms (~10GB)
+      before compiling. Free up space and re-run.
+  when:
+    - not sliver_binaries_present
+    - disk_avail_gb.stdout | int < sliver_min_disk_gb | int
+
 - name: Clone Sliver repository
   git:
     repo: "{{ sliver_repo_url }}"
@@ -86,15 +103,25 @@
 - name: Build Sliver
   shell: |
     set -o pipefail
-    make 2>&1 | tee /tmp/sliver_build_attempt1.log || true
+    make GOFLAGS="-buildvcs=false" V=1 2>&1 | tee /tmp/sliver_build_attempt1.log
   args:
     chdir: /tmp/sliver-src
   register: sliver_build
   when: not sliver_binaries_present
 
+- name: Show Sliver build output
+  debug:
+    msg: "{{ sliver_build.stdout_lines }}"
+  when:
+    - not sliver_binaries_present
+    - sliver_build is defined
+
 - name: Fail if build failed
   fail:
-    msg: "Sliver build failed"
+    msg: |
+      Sliver build failed (rc={{ sliver_build.rc }})
+      Last 20 lines:
+      {{ sliver_build.stdout_lines[-20:] | join('\n') }}
   when:
     - not sliver_binaries_present
     - sliver_build.rc != 0
