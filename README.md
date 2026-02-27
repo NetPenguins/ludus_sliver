@@ -39,8 +39,8 @@ An Ansible role to build and deploy the [Sliver C2](https://sliver.sh/) framewor
 |-------------------------|-----------------------------------------------------------------------------|------------------------|
 | `sliver_repo_url`                 | Sliver GitHub repo URL                                                      | `https://github.com/BishopFox/sliver.git` |
 | `sliver_version`                  | Version to install: `stable`, `latest`, or any tag/branch/commit            | `stable`               |
-| `sliver_install_path`             | Where to install the Sliver binaries                                        | `/usr/local/bin`       |
-| `sliver_build_dir`                | Directory used to clone and build Sliver. **Avoid `/tmp`** — it is a small tmpfs. Use a path on the main filesystem (e.g. `/opt/sliver-src`). Deleted after a successful build. | `/opt/sliver-src`      |
+| `sliver_install_path`             | Where the compiled binaries (`sliver-server`, `sliver-client`) are copied after a successful build. The directory is created automatically if it does not exist. | `/usr/local/bin`       |
+| `sliver_build_dir`                | Temporary directory used to clone the Sliver repo and compile the binaries. **Avoid `/tmp`** — it is a small tmpfs and will run out of space during asset downloads. Deleted automatically after a successful build. This is separate from `sliver_install_path` where the final binaries land. | `/opt/sliver-src`      |
 | `sliver_min_disk_gb`              | Minimum free GB required on the `sliver_build_dir` filesystem before starting the build. The asset downloads alone (~10 GB) will fail if space is insufficient. | `15`                   |
 | `sliver_build_user`               | User to build as                                                            | `root`                 |
 | `sliver_create_service`           | Whether to install a systemd service for `sliver-server`                    | `true`                 |
@@ -49,6 +49,11 @@ An Ansible role to build and deploy the [Sliver C2](https://sliver.sh/) framewor
 | `sliver_service_group`            | Group to run the service as                                                 | `root`                 |
 | `sliver_service_args`             | Extra arguments for the service                                             | `""`                   |
 |`sliver_generate_operator_configs` | Create operator config for root user ans users                              | `true`                 |
+
+> **Path clarification:**  
+> - `sliver_build_dir` — temporary workspace for `git clone` + `make`. Needs ~15 GB free. Deleted after build.  
+> - `sliver_install_path` — final destination for `sliver-server` and `sliver-client`. Created automatically if it does not exist.  
+> These two paths are independent; set them to different locations as needed.
 
 ### Operator Config Generation
 

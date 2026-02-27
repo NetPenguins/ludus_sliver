@@ -167,6 +167,13 @@
     - not sliver_binaries_present
     - sliver_client_binary.files | length == 0
 
+- name: Ensure sliver install path exists
+  file:
+    path: "{{ sliver_install_path }}"
+    state: directory
+    mode: '0755'
+  when: not sliver_binaries_present
+
 - name: Copy sliver-server binary
   copy:
     src: "{{ sliver_server_binary.files[0].path }}"
