@@ -26,18 +26,12 @@
   include_tasks: install_go.yml
   when: not sliver_binaries_present
 
-- name: Ensure /tmp/sliver-src directory is absent
+- name: Ensure sliver build directory is absent before clone
   file:
-    path: /tmp/sliver-src
+    path: "{{ sliver_build_dir }}"
     state: absent
   when: not sliver_binaries_present
 
-- name: Ensure sliver install path exists
-  file:
-    path: "{{ sliver_install_path }}"
-    state: directory
-    mode: '0755'
-  when: not sliver_binaries_present
 
 - name: Determine Sliver version to use
   set_fact:
@@ -69,8 +63,15 @@
     - not sliver_binaries_present
     - sliver_version == 'latest'
 
-- name: Check available disk space before build
-  shell: df --output=avail -BG / | tail -1 | tr -d 'G '
+- name: Ensure sliver build directory exists
+  file:
+    path: "{{ sliver_build_dir }}"
+    state: directory
+    mode: '0755'
+  when: not sliver_binaries_present
+
+- name: Check available disk space on build directory filesystem
+  shell: df --output=avail -BG "{{ sliver_build_dir }}" | tail -1 | tr -d 'G '
   register: disk_avail_gb
   changed_when: false
   when: not sliver_binaries_present
@@ -79,9 +80,10 @@
   fail:
     msg: >
       Not enough disk space to build Sliver.
-      Available: {{ disk_avail_gb.stdout }}GB, required: at least {{ sliver_min_disk_gb }}GB.
+      Available: {{ disk_avail_gb.stdout }}GB on the filesystem hosting {{ sliver_build_dir }},
+      required: at least {{ sliver_min_disk_gb }}GB.
       The build downloads Go toolchains, Zig, and Garble for 6 platforms (~10GB)
-      before compiling. Free up space and re-run.
+      before compiling. Set sliver_build_dir to a path on a larger filesystem or free up space.
   when:
     - not sliver_binaries_present
     - disk_avail_gb.stdout | int < sliver_min_disk_gb | int
@@ -89,23 +91,23 @@
 - name: Clone Sliver repository
   git:
     repo: "{{ sliver_repo_url }}"
-    dest: /tmp/sliver-src
+    dest: "{{ sliver_build_dir }}"
     version: "{{ sliver_version_resolved }}"
     force: yes
   when: not sliver_binaries_present
 
 - name: Download Go modules
   shell: |
-    cd /tmp/sliver-src
+    cd "{{ sliver_build_dir }}"
     go mod download
   when: not sliver_binaries_present
 
 - name: Build Sliver
   shell: |
     set -o pipefail
-    make GOFLAGS="-buildvcs=false" V=1 2>&1 | tee /tmp/sliver_build_attempt1.log
+    make GOFLAGS="-buildvcs=false" V=1 2>&1 | tee "{{ sliver_build_dir }}/sliver_build.log"
   args:
-    chdir: /tmp/sliver-src
+    chdir: "{{ sliver_build_dir }}"
   register: sliver_build
   when: not sliver_binaries_present
 
@@ -128,7 +130,7 @@
 
 - name: Find sliver-server binary
   find:
-    paths: /tmp/sliver-src
+    paths: "{{ sliver_build_dir }}"
     patterns: 'sliver-server*'
     file_type: file
     recurse: no
@@ -137,7 +139,7 @@
 
 - name: Find sliver-client binary
   find:
-    paths: /tmp/sliver-src
+    paths: "{{ sliver_build_dir }}"
     patterns: 'sliver-client*'
     file_type: file
     recurse: no
@@ -214,6 +216,6 @@
 
 - name: Clean up build directory
   file:
-    path: /tmp/sliver-src
+    path: "{{ sliver_build_dir }}"
     state: absent
   when: not sliver_binaries_present
