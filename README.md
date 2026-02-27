@@ -26,6 +26,7 @@ An Ansible role to build and deploy the [Sliver C2](https://sliver.sh/) framewor
 - Debian-based Linux (buster, bullseye, bookworm, jammy, focal, bionic)
 - Ansible 2.10+
 - Internet access (to fetch Sliver and dependencies)
+- **~15 GB free disk space** on the filesystem used for `sliver_build_dir` (default `/opt`). The build downloads Go toolchains, Zig, and Garble for 6 platforms before compiling. `/tmp` is typically a small tmpfs and will run out of space — always use a path on the main filesystem.
 
 ---
 
@@ -39,6 +40,8 @@ An Ansible role to build and deploy the [Sliver C2](https://sliver.sh/) framewor
 | `sliver_repo_url`                 | Sliver GitHub repo URL                                                      | `https://github.com/BishopFox/sliver.git` |
 | `sliver_version`                  | Version to install: `stable`, `latest`, or any tag/branch/commit            | `stable`               |
 | `sliver_install_path`             | Where to install the Sliver binaries                                        | `/usr/local/bin`       |
+| `sliver_build_dir`                | Directory used to clone and build Sliver. **Avoid `/tmp`** — it is a small tmpfs. Use a path on the main filesystem (e.g. `/opt/sliver-src`). Deleted after a successful build. | `/opt/sliver-src`      |
+| `sliver_min_disk_gb`              | Minimum free GB required on the `sliver_build_dir` filesystem before starting the build. The asset downloads alone (~10 GB) will fail if space is insufficient. | `15`                   |
 | `sliver_build_user`               | User to build as                                                            | `root`                 |
 | `sliver_create_service`           | Whether to install a systemd service for `sliver-server`                    | `true`                 |
 | `sliver_service_name`             | Name of the systemd service                                                 | `sliver-server`        |
@@ -122,6 +125,7 @@ ludus:
       - netpenguins.ludus_sliver
     role_vars:
       sliver_version: stable
+      sliver_build_dir: /opt/sliver-src   # avoid /tmp — it is a small tmpfs
       sliver_create_service: true
       sliver_generate_operator_configs: true
       sliver_install_implant_generator: true
@@ -161,7 +165,9 @@ ludus:
 When `sliver_install_implant_generator: true`, the role executes this sequence:
 
 ```
-1. Build & install sliver-server + sliver-client
+1. Check disk space on `sliver_build_dir` filesystem (need ≥ `sliver_min_disk_gb` GB)
+   Build & install sliver-server + sliver-client into `sliver_install_path`
+   (skipped if both binaries already exist)
 2. Install systemd service (if sliver_create_service)
 3. Generate operator configs (if sliver_generate_operator_configs)
        → /root/.sliver-client/configs/root_localhost.cfg
