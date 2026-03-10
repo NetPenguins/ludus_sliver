@@ -2,8 +2,6 @@
 ######################
 #   Install Sliver   #
 ######################
-- name: Include Go installation tasks
-  include_tasks: install_go.yml
 
 - name: Ensure /tmp/sliver-src directory is absent
   file:
@@ -15,7 +13,13 @@
     path: "{{ sliver_install_path }}"
     state: directory
     mode: '0755'
-    
+
+- name: Install git (required for clone)
+  apt:
+    name: git
+    state: present
+    update_cache: yes
+
 - name: Determine Sliver version to use
   set_fact:
     sliver_version_resolved: "{{ sliver_version }}"
@@ -44,6 +48,9 @@
     dest: /tmp/sliver-src
     version: "{{ sliver_version_resolved }}"
     force: yes
+
+- name: Include Go installation tasks
+  include_tasks: install_go.yml
 
 - name: Download Go modules
   shell: |

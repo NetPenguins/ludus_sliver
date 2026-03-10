@@ -1,7 +1,7 @@
 ---
-#  Need to target go install according to https://sliver.sh/docs?name=Compile+from+Source
+#  Install the exact Go version required by the cloned Sliver source's go.mod
 
-- name: Install build dependencies (excluding Go for now)
+- name: Install build dependencies
   apt:
     name:
       - git
@@ -11,41 +11,44 @@
     state: present
     update_cache: yes
 
-- name: Check if we need Go 1.20.7 (for stable/1.5.x versions)
+- name: Read required Go version from go.mod
+  shell: grep '^go ' /tmp/sliver-src/go.mod | awk '{print $2}'
+  register: go_mod_version
+  changed_when: false
+
+- name: Set go_required_version fact
   set_fact:
-    need_go_1_20_7: "{{ sliver_version == 'stable' or (sliver_version is match('1\\.5\\..*')) }}"
+    go_required_version: "{{ go_mod_version.stdout }}"
 
-- name: Remove existing Go installation (for stable/1.5.x versions)
-  apt:
-    name: golang-go
+- name: Check currently installed Go version
+  shell: /usr/local/go/bin/go version 2>/dev/null | grep -oP '(?<=go)[0-9]+\.[0-9]+(\.[0-9]+)?' || echo 'none'
+  register: current_go_version
+  changed_when: false
+  failed_when: false
+
+- name: Remove existing Go installation if version mismatch
+  file:
+    path: /usr/local/go
     state: absent
-  when: need_go_1_20_7
+  when: current_go_version.stdout != go_required_version
 
-- name: Download Go 1.20.7 tarball (for stable/1.5.x versions)
+- name: Download Go tarball
   get_url:
-    url: https://go.dev/dl/go1.20.7.linux-amd64.tar.gz
-    dest: /tmp/go1.20.7.linux-amd64.tar.gz
+    url: "https://go.dev/dl/go{{ go_required_version }}.linux-amd64.tar.gz"
+    dest: "/tmp/go{{ go_required_version }}.linux-amd64.tar.gz"
     mode: '0644'
-  when: need_go_1_20_7
+  when: current_go_version.stdout != go_required_version
 
-- name: Extract Go 1.20.7 to /usr/local (for stable/1.5.x versions)
+- name: Extract Go to /usr/local
   unarchive:
-    src: /tmp/go1.20.7.linux-amd64.tar.gz
+    src: "/tmp/go{{ go_required_version }}.linux-amd64.tar.gz"
     dest: /usr/local
     remote_src: yes
-    creates: /usr/local/go/bin/go
-  when: need_go_1_20_7
+  when: current_go_version.stdout != go_required_version
 
-- name: Create symlink for Go binary in /usr/local/bin (for stable/1.5.x versions)
+- name: Create symlink for Go binary in /usr/local/bin
   file:
     src: /usr/local/go/bin/go
     dest: /usr/local/bin/go
     state: link
     force: yes
-  when: need_go_1_20_7
-
-- name: Install Go from apt (for latest versions)
-  apt:
-    name: golang
-    state: present
-  when: not need_go_1_20_7 
