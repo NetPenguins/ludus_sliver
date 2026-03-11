@@ -3,10 +3,12 @@
 #   Install Sliver   #
 ######################
 
-- name: Ensure /tmp/sliver-src directory is absent
+- name: Ensure sliver build directory is absent before clone
   file:
-    path: /tmp/sliver-src
+    path: "{{ sliver_build_dir }}"
     state: absent
+  when: not sliver_binaries_present
+
 
 - name: Ensure sliver install path exists
   file:
@@ -23,84 +25,146 @@
 - name: Determine Sliver version to use
   set_fact:
     sliver_version_resolved: "{{ sliver_version }}"
-  when: sliver_version not in ['stable', 'latest']
+  when:
+    - not sliver_binaries_present
+    - sliver_version not in ['stable', 'latest']
 
 - name: Get latest stable Sliver tag
   shell: |
     git ls-remote --tags --sort="v:refname" https://github.com/BishopFox/sliver | grep '\^{}' | tail -n1 | sed 's/.*refs\/tags\///;s/\^{}//'
   register: sliver_latest_tag
-  when: sliver_version == 'stable'
+  when:
+    - not sliver_binaries_present
+    - sliver_version == 'stable'
   changed_when: false
 
 - name: Set resolved version to latest stable tag
   set_fact:
     sliver_version_resolved: "{{ sliver_latest_tag.stdout }}"
-  when: sliver_version == 'stable'
+  when:
+    - not sliver_binaries_present
+    - sliver_version == 'stable'
 
 - name: Set resolved version to master for latest
   set_fact:
     sliver_version_resolved: "master"
-  when: sliver_version == 'latest'
+  when:
+    - not sliver_binaries_present
+    - sliver_version == 'latest'
+
+- name: Ensure sliver build directory exists
+  file:
+    path: "{{ sliver_build_dir }}"
+    state: directory
+    mode: '0755'
+  when: not sliver_binaries_present
+
+- name: Check available disk space on build directory filesystem
+  shell: df --output=avail -BG "{{ sliver_build_dir }}" | tail -1 | tr -d 'G '
+  register: disk_avail_gb
+  changed_when: false
+  when: not sliver_binaries_present
+
+- name: Fail if insufficient disk space for Sliver build
+  fail:
+    msg: >
+      Not enough disk space to build Sliver.
+      Available: {{ disk_avail_gb.stdout }}GB on the filesystem hosting {{ sliver_build_dir }},
+      required: at least {{ sliver_min_disk_gb }}GB.
+      The build downloads Go toolchains, Zig, and Garble for 6 platforms (~10GB)
+      before compiling. Set sliver_build_dir to a path on a larger filesystem or free up space.
+  when:
+    - not sliver_binaries_present
+    - disk_avail_gb.stdout | int < sliver_min_disk_gb | int
 
 - name: Clone Sliver repository
   git:
     repo: "{{ sliver_repo_url }}"
-    dest: /tmp/sliver-src
+    dest: "{{ sliver_build_dir }}"
     version: "{{ sliver_version_resolved }}"
     force: yes
+  when: not sliver_binaries_present
 
 - name: Include Go installation tasks
   include_tasks: install_go.yml
 
 - name: Download Go modules
   shell: |
-    cd /tmp/sliver-src
+    cd "{{ sliver_build_dir }}"
     go mod download
+  when: not sliver_binaries_present
 
 - name: Build Sliver
   shell: |
     set -o pipefail
-    make 2>&1 | tee /tmp/sliver_build_attempt1.log || true
+    make GOFLAGS="-buildvcs=false" V=1 2>&1 | tee "{{ sliver_build_dir }}/sliver_build.log"
   args:
-    chdir: /tmp/sliver-src
+    chdir: "{{ sliver_build_dir }}"
   register: sliver_build
+  when: not sliver_binaries_present
+
+- name: Show Sliver build output
+  debug:
+    msg: "{{ sliver_build.stdout_lines }}"
+  when:
+    - not sliver_binaries_present
+    - sliver_build is defined
 
 - name: Fail if build failed
   fail:
-    msg: "Sliver build failed"
-  when: sliver_build.rc != 0
+    msg: |
+      Sliver build failed (rc={{ sliver_build.rc }})
+      Last 20 lines:
+      {{ sliver_build.stdout_lines[-20:] | join('\n') }}
+  when:
+    - not sliver_binaries_present
+    - sliver_build.rc != 0
 
 - name: Find sliver-server binary
   find:
-    paths: /tmp/sliver-src
+    paths: "{{ sliver_build_dir }}"
     patterns: 'sliver-server*'
     file_type: file
     recurse: no
   register: sliver_server_binary
+  when: not sliver_binaries_present
 
 - name: Find sliver-client binary
   find:
-    paths: /tmp/sliver-src
+    paths: "{{ sliver_build_dir }}"
     patterns: 'sliver-client*'
     file_type: file
     recurse: no
   register: sliver_client_binary
+  when: not sliver_binaries_present
 
 - name: Debug - Show found binaries
   debug:
     msg: |
       Server binary: {{ sliver_server_binary.files | map(attribute='path') | list }}
       Client binary: {{ sliver_client_binary.files | map(attribute='path') | list }}
+  when: not sliver_binaries_present
 
 - name: Fail if server binary not found
   fail:
     msg: "sliver-server binary not found after build"
-  when: sliver_server_binary.files | length == 0
+  when:
+    - not sliver_binaries_present
+    - sliver_server_binary.files | length == 0
 
 - name: Fail if client binary not found
   fail:
     msg: "sliver-client binary not found after build"
-  when: sliver_client_binary.files | length == 0
+  when:
+    - not sliver_binaries_present
+    - sliver_client_binary.files | length == 0
+
+- name: Ensure sliver install path exists
+  file:
+    path: "{{ sliver_install_path }}"
+    state: directory
+    mode: '0755'
+  when: not sliver_binaries_present
 
 - name: Copy sliver-server binary
   copy:
@@ -108,6 +172,7 @@
     dest: "{{ sliver_install_path }}/sliver-server"
     mode: '0755'
     remote_src: yes
+  when: not sliver_binaries_present
 
 - name: Copy sliver-client binary
   copy:
@@ -115,6 +180,7 @@
     dest: "{{ sliver_install_path }}/sliver-client"
     mode: '0755'
     remote_src: yes
+  when: not sliver_binaries_present
 
 - name: Create systemd service for Sliver (optional)
   when: sliver_create_service
@@ -139,7 +205,16 @@
         (lookup('fileglob', role_path + '/files/*.yml', errors='ignore') | length > 0) or
         (lookup('fileglob', role_path + '/files/*.json', errors='ignore') | length > 0)
 
+- name: Configure operator configs
+  ansible.builtin.include_tasks: configure_operators.yml
+  when: sliver_generate_operator_configs | bool
+
+- name: Install Sliver implant generator
+  include_tasks: install_implant_generator.yml
+  when: sliver_install_implant_generator | bool
+
 - name: Clean up build directory
   file:
-    path: /tmp/sliver-src
+    path: "{{ sliver_build_dir }}"
     state: absent
+  when: not sliver_binaries_present

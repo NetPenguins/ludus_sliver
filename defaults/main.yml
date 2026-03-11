@@ -1,6 +1,12 @@
 ---
 # Default variables for the Sliver Role
 sliver_repo_url: "https://github.com/BishopFox/sliver.git"
+# Build directory for Sliver source. Avoid /tmp - it is usually a small tmpfs.
+# The build downloads Go toolchains, Zig, and Garble for 6 platforms (~10GB).
+# Make sure the filesystem hosting this path has at least sliver_min_disk_gb free.
+sliver_build_dir: "/opt/sliver-src"
+# Minimum free disk space (GB) required before attempting a Sliver build.
+sliver_min_disk_gb: 15
 # 'stable' will get you the latest release
 # 'latest' will get you the master branch (likely to have bugs, but also cooler stuff so enjoy!)
 sliver_version: "stable" 
@@ -11,3 +17,44 @@ sliver_service_name: "sliver-server"
 sliver_service_user: "root"
 sliver_service_group: "root"
 sliver_service_args: "daemon"
+# Whether to generate operator configs for root and all users
+sliver_generate_operator_configs: true
+sliver_root_lhost_ip: "localhost"
+# Can change here for other users
+sliver_users_lhost_ip: "{{ ansible_default_ipv4.address }}"
+
+# Implant generator settings
+# Set to true to install sliver-implant.py and its Python venv
+
+sliver_install_implant_generator: true
+sliver_py_repo: "https://github.com/moloch--/sliver-py.git"
+sliver_py_branch: "v1.6.x"
+sliver_implant_venv_path: "/opt/sliver-py-venv"
+sliver_implant_script_path: "/opt/sliver-implant.py"
+sliver_implant_script_owner: "root"
+
+# Operator config used by sliver-implant
+# The role will generate a new operator config if this path does not exist
+sliver_operator_name: "kali"
+sliver_operator_config_dir: "/home/kali/.sliver-client/configs"
+sliver_operator_config_path: "{{ sliver_operator_config_dir }}/{{ sliver_operator_name }}.cfg"
+
+# Listener bootstrap
+# Set to true to automatically start a listener after deployment
+sliver_create_listener: true
+sliver_listener_c2: "mtls://0.0.0.0:8888"   # protocol://host:port
+
+# Implant bootstrap
+# Set to true to automatically generate a first implant after deployment
+sliver_create_implant: true
+sliver_implant_profile_name: "mtls_profile"
+# Do NOT include extension - role appends .{{ sliver_implant_format }} automatically 
+sliver_implant_file_name: "editor"
+sliver_implant_c2: "mtls://{{ ansible_default_ipv4.address }}:8888"  # reachable address for callbacks
+sliver_implant_os: "windows"
+sliver_implant_arch: "amd64"
+sliver_implant_format: "exe"
+sliver_implant_beacon: true
+sliver_implant_beacon_interval: 60
+sliver_implant_beacon_jitter: 30
+sliver_implant_output_dir: "/opt/sliver-implants"

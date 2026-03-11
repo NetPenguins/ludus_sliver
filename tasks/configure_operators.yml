@@ -1,0 +1,39 @@
+---
+
+- name: Create root sliver-client configs directory
+  ansible.builtin.file:
+    path: /root/.sliver-client/configs
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Generate root operator config
+  ansible.builtin.command:
+    cmd: "{{ sliver_install_path }}/sliver-server operator --name root --permissions all --lhost {{sliver_root_lhost_ip}} --save /root/.sliver-client/configs/root_localhost.cfg"
+  args:
+    creates: /root/.sliver-client/configs/root_localhost.cfg
+  register: root_operator_result
+  changed_when: root_operator_result.rc == 0
+
+- name: Ensure root owns sliver-client directory
+  ansible.builtin.file:
+    path: /root/.sliver-client
+    owner: root
+    group: root
+    recurse: yes
+    mode: '0700'
+
+- name: Get list of home directories
+  ansible.builtin.find:
+    paths: /home
+    file_type: directory
+    recurse: no
+  register: home_directories
+
+- name: Generate operator configs for each user
+  ansible.builtin.include_tasks: configure_user_operator.yml
+  loop: "{{ home_directories.files }}"
+  loop_control:
+    loop_var: user_home
+  when: home_directories.files | length > 0
