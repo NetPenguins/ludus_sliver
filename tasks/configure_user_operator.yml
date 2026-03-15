@@ -1,0 +1,39 @@
+---
+
+- name: Set username from path
+  ansible.builtin.set_fact:
+    current_user: "{{ user_home.path | basename }}"
+
+- name: Check if user exists
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ current_user }}"
+  register: user_check
+  failed_when: false
+
+- name: Process user operator config
+  when: user_check.ansible_facts.getent_passwd is defined
+  block:
+    - name: Create sliver-client configs directory for {{ current_user }}
+      ansible.builtin.file:
+        path: "{{ user_home.path }}/.sliver-client/configs"
+        state: directory
+        owner: "{{ current_user }}"
+        group: "{{ current_user }}"
+        mode: '0700'
+
+    - name: Generate operator config for {{ current_user }}
+      ansible.builtin.command:
+        cmd: "{{ sliver_install_path }}/sliver-server operator --name {{ current_user }} --permissions all --lhost {{ sliver_users_lhost_ip }} --save {{ user_home.path }}/.sliver-client/configs/{{ current_user }}.cfg"
+      args:
+        creates: "{{ user_home.path }}/.sliver-client/configs/{{ current_user }}.cfg"
+      register: user_operator_result
+      changed_when: user_operator_result.rc == 0
+
+    - name: Ensure {{ current_user }} owns sliver-client directory
+      ansible.builtin.file:
+        path: "{{ user_home.path }}/.sliver-client"
+        owner: "{{ current_user }}"
+        group: "{{ current_user }}"
+        recurse: yes
+        mode: '0700'

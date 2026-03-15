@@ -1,0 +1,166 @@
+---
+####################################
+#   Sliver Implant Generator Setup  #
+####################################
+- name: Ensure python3-venv, python3-pip, and git are installed
+  apt:
+    name:
+      - python3-venv
+      - python3-pip
+      - git
+    state: present
+    update_cache: yes
+    install_recommends: false
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  retries: 3
+  delay: 10
+  register: apt_result
+  until: apt_result is succeeded
+
+- name: Create Python venv for sliver-py
+  command: python3 -m venv {{ sliver_implant_venv_path }}
+  args:
+    creates: "{{ sliver_implant_venv_path }}/bin/activate"
+
+- name: Check if sliver-py is already installed in venv
+  command: "{{ sliver_implant_venv_path }}/bin/python -c 'import sliver; print(sliver.__version__)'"
+  register: sliver_py_check
+  changed_when: false
+  failed_when: false
+
+- name: Clone sliver-py repository
+  git:
+    repo: "{{ sliver_py_repo }}"
+    dest: "{{ sliver_implant_venv_path }}/sliver-py-src"
+    version: "{{ sliver_py_branch }}"
+    depth: 1
+    recursive: false
+    force: false
+  register: sliver_py_git_clone
+  when: sliver_py_check.rc != 0
+
+- name: Install sliver-py from local clone into venv
+  pip:
+    name: "{{ sliver_implant_venv_path }}/sliver-py-src"
+    virtualenv: "{{ sliver_implant_venv_path }}"
+    state: present
+  when:
+    - sliver_py_check.rc != 0
+    - sliver_py_git_clone is not skipped
+
+- name: Deploy sliver-implant.py script
+  copy:
+    src: sliver-implant.py
+    dest: "{{ sliver_implant_script_path }}"
+    owner: "{{ sliver_implant_script_owner }}"
+    group: "{{ sliver_implant_script_owner }}"
+    mode: '0750'
+
+- name: Create sliver-implant wrapper script
+  copy:
+    dest: /usr/local/bin/sliver-implant
+    mode: '0755'
+    owner: root
+    group: root
+    content: |
+      #!/usr/bin/env bash
+      # Wrapper: runs sliver-implant.py inside its dedicated venv
+      exec {{ sliver_implant_venv_path }}/bin/python {{ sliver_implant_script_path }} "$@"
+
+####################################
+#   Operator Config & Bootstrap     #
+####################################
+
+- name: Ensure sliver-server service is started
+  systemd:
+    name: "{{ sliver_service_name }}"
+    state: started
+  when: sliver_create_service | bool
+
+- name: Wait for sliver-server multiplayer port to be ready
+  wait_for:
+    port: 31337
+    host: 127.0.0.1
+    delay: 5
+    timeout: 60
+  when: sliver_create_service | bool
+
+
+####################################
+#   Start Listener                  #
+####################################
+
+- name: Start bootstrap listener
+  shell: |
+    /usr/local/bin/sliver-implant start-listener \
+      --config "{{ sliver_operator_config_path }}" \
+      --c2 "{{ sliver_listener_c2 }}"
+  register: sliver_listener_result
+  changed_when: "'already running' not in sliver_listener_result.stdout"
+  when: sliver_create_listener | bool
+
+- name: Show listener result
+  debug:
+    msg: "{{ sliver_listener_result.stdout_lines }}"
+  when: 
+    - sliver_create_listener | bool
+    - sliver_listener_result is defined
+
+####################################
+#   Generate Bootstrap Implant      #
+####################################
+
+- name: Ensure implant output directory exists
+  file:
+    path: "{{ sliver_implant_output_dir }}"
+    state: directory
+    mode: '0750'
+    owner: "{{ sliver_operator_name }}"
+    group: "{{ sliver_operator_name }}"
+  when: sliver_create_implant | bool
+
+- name: Check if bootstrap implant already exists
+  find:
+    paths: "{{ sliver_implant_output_dir }}"
+    patterns: "{{ sliver_implant_file_name }}*"
+  register: sliver_existing_implant
+  when: sliver_create_implant | bool
+
+- name: Generate bootstrap implant
+  shell: |
+    /usr/local/bin/sliver-implant generate \
+      --config "{{ sliver_operator_config_path }}" \
+      --name   "{{ sliver_implant_profile_name }}" \
+      --c2     "{{ sliver_implant_c2 }}" \
+      --os     "{{ sliver_implant_os }}" \
+      --arch   "{{ sliver_implant_arch }}" \
+      --format "{{ sliver_implant_format }}" \
+      --output "{{ sliver_implant_output_dir }}/{{ sliver_implant_file_name }}.{{ sliver_implant_format }}" \
+      {% if sliver_implant_beacon %}\
+      --beacon \
+      --interval "{{ sliver_implant_beacon_interval }}" \
+      --jitter   "{{ sliver_implant_beacon_jitter }}" \
+      {% endif %}
+
+  register: sliver_implant_result
+  when:
+    - sliver_create_implant | bool
+    - sliver_existing_implant is defined
+    - sliver_existing_implant.files | length == 0
+
+- name: Show implant generation result
+  debug:
+    msg: "{{ sliver_implant_result.stdout_lines }}"
+  when:
+    - sliver_create_implant | bool
+    - sliver_implant_result is defined
+    - sliver_existing_implant.files | length == 0
+
+- name: Show implant already exists notice
+  debug:
+    msg: "Bootstrap implant already exists in {{ sliver_implant_output_dir }}, skipping generation."
+  when:
+    - sliver_create_implant | bool
+    - sliver_existing_implant is defined
+    - sliver_existing_implant.files | length > 0
