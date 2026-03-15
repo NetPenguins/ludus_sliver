@@ -27,7 +27,7 @@ sliver_users_lhost_ip: "{{ ansible_default_ipv4.address }}"
 # Set to true to install sliver-implant.py and its Python venv
 
 sliver_install_implant_generator: true
-sliver_py_repo: "https://github.com/moloch--/sliver-py.git"
+sliver_py_repo: "https://github.com/sliverarmory/sliver-py"
 sliver_py_branch: "v1.6.x"
 sliver_implant_venv_path: "/opt/sliver-py-venv"
 sliver_implant_script_path: "/opt/sliver-implant.py"
